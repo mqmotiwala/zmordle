@@ -1,0 +1,66 @@
+name: Deploy Lambda Functions
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/lambdas/**'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Deploy all Lambda functions
+        run: |
+          # map source directory -> deployed AWS Lambda function name
+          declare -A FN_MAP=(
+            ["update_scores"]="update-scores-wordle-scoreboard"
+            ["build_analytics"]="build-analytics-wordle-scoreboard"
+          )
+
+          for fn_dir in backend/lambdas/*; do
+            [ -d "$fn_dir" ] || continue
+            dir_name=$(basename "$fn_dir")
+            fn_name="${FN_MAP[$dir_name]}"
+
+            if [ -z "$fn_name" ]; then
+              echo "No function mapping for '$dir_name', skipping."
+              continue
+            fi
+
+            echo "Deploying $dir_name -> $fn_name…"
+            pushd "$fn_dir" >/dev/null
+
+            rm -f function.zip
+            rm -rf package
+
+            # zip source files
+            zip function.zip *.py
+
+            # include third-party dependencies, if any are declared
+            if grep -qvE '^\s*(#.*)?$' requirements.txt 2>/dev/null; then
+              mkdir -p package
+              pip install -r requirements.txt --target package
+              pushd package >/dev/null
+              zip -r9 ../function.zip .
+              popd >/dev/null
+            fi
+
+            aws lambda update-function-code \
+              --function-name "$fn_name" \
+              --zip-file fileb://function.zip
+
+            popd >/dev/null
+            echo "$fn_name deployed."
+          done
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: us-west-2

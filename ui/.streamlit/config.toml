@@ -1,0 +1,16 @@
+[theme]
+primaryColor="#c9b458"
+backgroundColor="#FFFFFF"
+secondaryBackgroundColor="#F0F2F6"
+textColor="#31333F"
+
+[client]
+toolbarMode = "minimal"
+
+[server]
+port = 8501
+enableCORS = false
+enableXsrfProtection = false
+
+[global]
+disableWidgetStateDuplicationWarning = true

@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Secrets / local config
+.env
+secrets.toml
+.streamlit/secrets.toml
+
+# Build artifacts
+function.zip
+package/
