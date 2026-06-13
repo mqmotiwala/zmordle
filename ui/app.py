@@ -11,6 +11,7 @@ import utils.data as data
 
 from sections.header import show_header
 from sections.banner import show_banner
+from sections.upload import show_upload
 from sections.scoreboard import show_scoreboard
 
 st.set_page_config(**c.STREAMLIT_PAGE_CONFIG)
@@ -20,6 +21,7 @@ show_header()
 analytics = data.load_analytics()
 
 show_banner(analytics)
+show_upload(analytics)
 
 if analytics:
     show_scoreboard(analytics)

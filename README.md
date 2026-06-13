@@ -5,3 +5,5 @@ Head-to-head Wordle scoreboard for a WhatsApp chat where two players share their
 A manual chat export is uploaded to S3, which kicks off a serverless pipeline that updates the running score, and a Streamlit app
 renders the scoreboard.
 
+Deployed at: 
+https://wordle-scoreboard.up.railway.app/ 

@@ -44,4 +44,3 @@ def show_banner(analytics):
         f"📅 {css.underline('Last reported puzzle')}: "
         f"Wordle {puzzle:,} on {when}{rel_suffix}."
     )
-    css.divider()

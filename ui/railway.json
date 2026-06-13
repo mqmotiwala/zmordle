@@ -1,6 +1,6 @@
 {
     "build": {
-        "builder": "NIXPACKS"
+        "builder": "RAILPACK"
     },
     "deploy": {
         "startCommand": "streamlit run app.py --server.address 0.0.0.0 --server.port $PORT --server.fileWatcherType none --browser.gatherUsageStats false --client.toolbarMode minimal"
