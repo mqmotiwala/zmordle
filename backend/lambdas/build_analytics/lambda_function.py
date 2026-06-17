@@ -65,10 +65,19 @@ def build_payload(items):
     running = []
     table_rows = []
     cum = {p1: 0, p2: 0}
+    guess_sum = {p1: 0, p2: 0}
+    guess_cnt = {p1: 0, p2: 0}
 
     for item in sorted(items, key=lambda it: int(it["puzzle"])):
         puzzle = int(item["puzzle"])
         has1, has2 = _has(item, p1), _has(item, p2)
+
+        # accumulate each player's turns across every puzzle they played
+        # (fails are already stored as 7, so they count as 7 turns)
+        for player in (p1, p2):
+            if _has(item, player):
+                guess_sum[player] += int(item[f"{player}_guesses"])
+                guess_cnt[player] += 1
 
         if has1 and has2:
             summary["shared"] += 1
@@ -99,6 +108,12 @@ def build_payload(items):
             summary[f"{p2}_only"] += 1
 
     latest = _compute_latest(items)
+
+    # per-player average turns over all puzzles they played (X/6 counts as 7)
+    for player in (p1, p2):
+        cnt = guess_cnt[player]
+        summary[f"{player}_played"] = cnt
+        summary[f"{player}_avg_guesses"] = round(guess_sum[player] / cnt, 2) if cnt else None
 
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),

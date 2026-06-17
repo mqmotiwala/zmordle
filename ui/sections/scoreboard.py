@@ -31,6 +31,15 @@ def show_scoreboard(analytics):
     wins2 = summary.get(f"{p2}_wins", 0)
     ties = summary.get("ties", 0)
     shared = summary.get("shared", 0)
+    avg1 = summary.get(f"{p1}_avg_guesses")
+    avg2 = summary.get(f"{p2}_avg_guesses")
+
+    def _fmt_avg(v):
+        return f"{v:.2f}" if isinstance(v, (int, float)) else "—"
+
+    avg_help = (
+        "Average turns per puzzle played. An unsolved puzzle (X/6) counts as 7 turns."
+    )
 
     # --- overall W/L/T metrics ---
     lead = wins1 - wins2
@@ -49,6 +58,8 @@ def show_scoreboard(analytics):
         st.metric(f"{name1} wins", wins1, border=False)
         st.metric(f"{name2} wins", wins2, border=False)
         st.metric("Ties", ties, border=False)
+        st.metric(f"{name1} avg turns", _fmt_avg(avg1), help=avg_help, border=False)
+        st.metric(f"{name2} avg turns", _fmt_avg(avg2), help=avg_help, border=False)
 
     css.divider()
 
