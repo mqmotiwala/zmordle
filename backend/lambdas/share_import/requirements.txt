@@ -1,0 +1,2 @@
+# No third-party dependencies: stdlib (zipfile, hmac, base64) plus boto3,
+# which the Lambda Python runtime already provides.

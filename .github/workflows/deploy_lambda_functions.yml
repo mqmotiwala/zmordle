@@ -23,6 +23,7 @@ jobs:
           declare -A FN_MAP=(
             ["update_scores"]="update-scores-wordle-scoreboard"
             ["build_analytics"]="build-analytics-wordle-scoreboard"
+            ["share_import"]="share-import-wordle-scoreboard"
           )
 
           for fn_dir in backend/lambdas/*; do

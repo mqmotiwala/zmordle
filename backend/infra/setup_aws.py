@@ -37,9 +37,14 @@ TABLE = "results-wordle-scoreboard"
 ROLE_NAME = "wordle-scoreboard-lambda-role"
 FN_UPDATE = "update-scores-wordle-scoreboard"
 FN_ANALYTICS = "build-analytics-wordle-scoreboard"
+FN_SHARE = "share-import-wordle-scoreboard"
 
 EXPORT_PREFIX = "exports/"
 ANALYTICS_KEY = "analytics/scoreboard.json"
+
+# Shared secret checked by the share-import function's X-Api-Key header. Its
+# Function URL is public, so this is the only thing gating the ingest path.
+SHARE_SECRET = os.environ.get("SHARE_SECRET", "")
 
 LAMBDAS_DIR = Path(__file__).resolve().parents[1] / "lambdas"
 RUNTIME = "python3.12"
@@ -242,6 +247,50 @@ def ensure_function(name, dir_name, env_vars):
         log(f"Updated Lambda '{name}'.")
 
 
+# --- public Function URL for the share-import Lambda ------------------------
+def ensure_function_url(name):
+    """
+    Give a function a public HTTPS endpoint and return its URL.
+
+    AuthType is NONE because no Android share app can sign requests with SigV4;
+    the function itself rejects anything without the right X-Api-Key header.
+    """
+    try:
+        resp = lam.create_function_url_config(FunctionName=name, AuthType="NONE")
+        log(f"Created Function URL for '{name}'.")
+    except ClientError as e:
+        if e.response["Error"]["Code"] != "ResourceConflictException":
+            raise
+        resp = lam.get_function_url_config(FunctionName=name)
+        log(f"Function URL for '{name}' already exists.")
+
+    # A public Function URL needs BOTH of these statements. With only the
+    # InvokeFunctionUrl one, every request still comes back 403 Forbidden.
+    grants = [
+        ("public-function-url", "lambda:InvokeFunctionUrl",
+         {"FunctionUrlAuthType": "NONE"}),
+        ("public-function-url-invoke", "lambda:InvokeFunction",
+         {"InvokedViaFunctionUrl": True}),
+    ]
+    for statement_id, action, extra in grants:
+        try:
+            lam.add_permission(
+                FunctionName=name,
+                StatementId=statement_id,
+                Action=action,
+                Principal="*",
+                **extra,
+            )
+            log(f"Granted {action} on '{name}'.")
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "ResourceConflictException":
+                log(f"{action} permission already present.")
+            else:
+                raise
+
+    return resp["FunctionUrl"]
+
+
 # --- S3 -> Lambda notification ----------------------------------------------
 def ensure_s3_trigger():
     statement_id = "s3invoke-update-scores"
@@ -304,6 +353,17 @@ def main():
         {"RESULTS_TABLE": TABLE, "EXPORT_PREFIX": EXPORT_PREFIX,
          "ANALYTICS_FUNCTION": FN_ANALYTICS},
     )
+    if not SHARE_SECRET:
+        raise SystemExit(
+            "SHARE_SECRET is not set. Add it to the repo-root .env before "
+            "provisioning the public share-import endpoint."
+        )
+    ensure_function(
+        FN_SHARE, "share_import",
+        {"BUCKET": BUCKET, "EXPORT_PREFIX": EXPORT_PREFIX,
+         "ANALYTICS_KEY": ANALYTICS_KEY, "SHARE_SECRET": SHARE_SECRET},
+    )
+    log(f"share-import URL: {ensure_function_url(FN_SHARE)}")
     ensure_s3_trigger()
     log("Done.")
 

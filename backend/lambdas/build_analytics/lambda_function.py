@@ -35,6 +35,15 @@ PLAYER_DISPLAY = {
 }
 PLAYERS = sorted(PLAYER_DISPLAY)  # ['mufi', 'zahra']
 
+# Short names used in the shareable summary. Keep in sync with PLAYER_DISPLAY in
+# ui/config.py, since the app renders the summary text this Lambda produces.
+PLAYER_SHORT = {
+    "mufi": "Mufaddal",
+    "zahra": "Zahra",
+}
+
+APP_URL = "https://wordle-scoreboard.up.railway.app/"
+
 
 def _scan_all(table):
     items = []
@@ -54,6 +63,168 @@ def _disp(guesses, is_fail):
 
 def _has(item, player):
     return f"{player}_guesses" in item and item.get(f"{player}_guesses") is not None
+
+
+# --- streaks -----------------------------------------------------------------
+def _head_to_head(rows, player_order):
+    """
+    Keep only the games both players have played, ordered oldest -> newest.
+
+    Ordering is by puzzle number, so this is a sequence of games rather than of
+    dates - calendar gaps between puzzles carry no meaning here.
+    """
+    p1, p2 = player_order
+    games = [r for r in rows if r.get(p1) is not None and r.get(p2) is not None]
+    return sorted(games, key=lambda r: int(r["puzzle"]))
+
+
+def _streaks(rows, player_order):
+    """
+    Measure win streaks in games, walking head-to-head puzzles oldest -> newest.
+
+    Streaks are counted per game, never per date. A streak only advances on a
+    puzzle both players finished, so a puzzle only one of them played is skipped
+    over rather than treated as a break - as are any calendar gaps between
+    puzzles. Ordering comes from the puzzle number; dates never enter into it.
+
+    A tie ends a streak.
+
+    Each run is reported with the puzzle it started and ended on. Where a player
+    has several runs of their best length, the earliest one is kept - that's the
+    run that set the record.
+
+    Returns a dict with:
+      longest -> {"length": int, "runs": [run, ...]} or None, where runs holds
+                 one entry per player level on that length
+      current -> the run still alive, or None
+      last_winner -> winner of the most recent head-to-head puzzle, or None
+
+    A run is {"player": id, "length": int, "start": puzzle, "end": puzzle}.
+    """
+    best = {p: None for p in player_order}  # each player's record run
+    run_player, run_len, run_start, run_end = None, 0, None, None
+    last_winner = None
+
+    for row in _head_to_head(rows, player_order):
+        puzzle = int(row["puzzle"])
+        winner = row.get("winner")
+        last_winner = winner
+
+        if winner in best:
+            if winner == run_player:
+                run_len += 1
+            else:
+                run_player, run_len, run_start = winner, 1, puzzle
+            run_end = puzzle
+
+            # strictly greater, so a later run of equal length doesn't displace
+            # the one that set the record
+            if best[winner] is None or run_len > best[winner]["length"]:
+                best[winner] = {
+                    "player": winner, "length": run_len,
+                    "start": run_start, "end": run_end,
+                }
+        else:  # a tie (or an unrecognised winner) resets the run
+            run_player, run_len, run_start, run_end = None, 0, None, None
+
+    top = max((run["length"] for run in best.values() if run), default=0)
+    longest = (
+        {
+            "length": top,
+            "runs": [best[p] for p in player_order
+                     if best[p] and best[p]["length"] == top],
+        }
+        if top
+        else None
+    )
+    current = (
+        {"player": run_player, "length": run_len, "start": run_start, "end": run_end}
+        if run_player
+        else None
+    )
+
+    return {"longest": longest, "current": current, "last_winner": last_winner}
+
+
+# --- shareable summary -------------------------------------------------------
+def _fmt_avg(v):
+    return f"{v:.2f}" if isinstance(v, (int, float)) else "—"
+
+
+def _plural(n, word):
+    return f"{n} {word}" if n == 1 else f"{n} {word}s"
+
+
+def _names(players):
+    """Join one or more player ids into a display string."""
+    return " & ".join(PLAYER_SHORT.get(p, p) for p in players)
+
+
+def _streak_span(run):
+    """The puzzles a run started and ended on: 'Wordle 1,866-1,868'."""
+    start, end = run["start"], run["end"]
+    if start == end:
+        return f"Wordle {start:,}"
+    return f"Wordle {start:,}-{end:,}"
+
+
+def _whatsapp_summary(summary, streaks):
+    """
+    Build a plain-text recap of the scoreboard, ready to paste into WhatsApp.
+
+    Uses WhatsApp's markup - *bold* for the title, _italics_ for section headers
+    and the streak span - which renders as formatting once pasted into a chat.
+    Built as blocks: lines inside a block sit together, and blocks are separated
+    by one blank line.
+
+    Lives here rather than in the UI so that the app, and the response the
+    share-import endpoint hands back to the phone, are byte-identical.
+    """
+    p1, p2 = PLAYERS
+    name1 = PLAYER_SHORT.get(p1, p1)
+    name2 = PLAYER_SHORT.get(p2, p2)
+
+    wins1 = summary.get(f"{p1}_wins", 0)
+    wins2 = summary.get(f"{p2}_wins", 0)
+    shared = summary.get("shared", 0)
+    avg1 = _fmt_avg(summary.get(f"{p1}_avg_guesses"))
+    avg2 = _fmt_avg(summary.get(f"{p2}_avg_guesses"))
+
+    lead = wins1 - wins2
+    if lead > 0:
+        standing = f"🏆 {name1} leads by {lead}"
+    elif lead < 0:
+        standing = f"🏆 {name2} leads by {abs(lead)}"
+    else:
+        standing = "🤝 All square"
+
+    blocks = [
+        ["*Wordle Scoreboard*"],
+        [f"_Results of {_plural(shared, 'game')}_", standing],
+    ]
+
+    longest, current = streaks["longest"], streaks["current"]
+    if longest:
+        block = ["_Streaks_"]
+        if current:
+            block.append(
+                f"🔥 Current • {_names([current['player']])} {current['length']}"
+            )
+        # one Longest line per player, when they're level on the longest run
+        for run in longest["runs"]:
+            block.append(f"📈 Longest • {_names([run['player']])} {run['length']}")
+            block.append(f"_{_streak_span(run)}_")
+        blocks.append(block)
+
+    blocks.append([
+        "_Average Score_",
+        f"{avg1} • {name1}",
+        f"{avg2} • {name2}",
+    ])
+
+    blocks.append([f"_{APP_URL}_"])
+
+    return "\n\n".join("\n".join(block) for block in blocks)
 
 
 def build_payload(items):
@@ -115,14 +286,20 @@ def build_payload(items):
         summary[f"{player}_played"] = cnt
         summary[f"{player}_avg_guesses"] = round(guess_sum[player] / cnt, 2) if cnt else None
 
+    streaks = _streaks(table_rows, PLAYERS)
+
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "players": PLAYER_DISPLAY,
+        "players_short": PLAYER_SHORT,
         "player_order": PLAYERS,
         "summary": summary,
         "latest": latest,
+        "streaks": streaks,
         "running": running,
         "table": table_rows,
+        # Precomputed so the app and the share-import response can't drift apart.
+        "whatsapp_summary": _whatsapp_summary(summary, streaks),
     }
 
 
