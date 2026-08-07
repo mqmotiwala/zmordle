@@ -3,3 +3,4 @@ boto3==1.38.28
 pandas==2.2.3
 plotly==6.1.2
 python-dotenv==1.0.1
+st-copy==2.0.0
