@@ -38,9 +38,9 @@ s3 = boto3.client(
 # matches primaryColor in .streamlit/config.toml (Wordle "present" mustard yellow)
 PRIMARY_COLOR = "#ffc425"
 
-APP_TITLE = "Wordle Scoreboard"
+APP_TITLE = "zmordle"
 APP_ICON = ""
-APP_TAGLINE = "Who's really better at Wordle?"
+APP_TAGLINE = "Zahra v Mufaddal | Who's really better at Wordle?"
 
 # Anchor for back-calculating a puzzle's date (one puzzle per calendar day).
 # Verified: Wordle #1820 was Saturday, June 13, 2026.

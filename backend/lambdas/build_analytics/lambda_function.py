@@ -42,7 +42,10 @@ PLAYER_SHORT = {
     "zahra": "Zahra",
 }
 
-APP_URL = "https://wordle-scoreboard.up.railway.app/"
+# Keep in sync with APP_TITLE in ui/config.py; both surface in the summary and
+# the app header.
+APP_NAME = "zmordle"
+APP_URL = "https://zmordle.up.railway.app/"
 
 
 def _scan_all(table):
@@ -199,7 +202,7 @@ def _whatsapp_summary(summary, streaks):
         standing = "🤝 All square"
 
     blocks = [
-        ["*Wordle Scoreboard*"],
+        [f"*{APP_NAME}*"],
         [f"_Results of {_plural(shared, 'game')}_", standing],
     ]
 
